@@ -60,7 +60,7 @@ TotalRx (Ptr<OutputStreamWrapper> stream)
 static void
 CwndChange (Ptr<OutputStreamWrapper> stream, uint32_t oldCwnd, uint32_t newCwnd)
 {
-  std::cout << "bow bow\n";
+  //std::cout << "bow bow\n";
   *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << newCwnd << std::endl;
 }
 
@@ -150,41 +150,18 @@ main (int argc, char *argv[])
   double startTimes[5] = {0.2, 0.4, 0.6, 0.8, 1.0};
   double endTimes[5] = {1.8, 1.8, 1.2, 1.4, 1.6};
 
+  tcpSink->TraceConnectWithoutContext ("RxDrop", MakeCallback (&RxDrop));
+
   for (int i = 0; i < 5; i++)
     {
-      // Install applications: five CBR streams each saturating the channel
       ApplicationContainer cbrApps;
       ApplicationContainer cbrSinkApps;
-      /*
-      OnOffHelper is a helper class in ns-3 that is used to create traffic generators that generate traffic periodically. 
-      It can be used to simulate different types of traffic such as Constant Bit Rate (CBR) or Exponential Bit Rate (EBR) traffic.
-      */
+
       OnOffHelper onOffHelper ("ns3::UdpSocketFactory",
                                InetSocketAddress (ipv4Container.GetAddress (1), cbrPort + i));
       onOffHelper.SetAttribute ("PacketSize", UintegerValue (1024));
       onOffHelper.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
       onOffHelper.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-      /*
-        These lines of code set the OnTime and OffTime attributes of the OnOffHelper object 'onoff' to 
-        ConstantRandomVariable objects with constant values of 1 and 0, respectively.
-
-        The OnTime attribute specifies the duration of the ON period,
-        which is the period during which the traffic generator generates traffic. 
-        By setting the OnTime attribute to a ConstantRandomVariable with a constant value of 1 second,
-        we ensure that the ON period duration is always 1 second.
-        The OffTime attribute specifies the duration of the OFF period, 
-        which is the period during which the traffic generator does not generate traffic. 
-        By setting the OffTime attribute to a ConstantRandomVariable with a constant value of 0 seconds, 
-        we ensure that there is no OFF period and the traffic generator generates traffic continuously.
-
-        In other words, the OnOffHelper object 'onoff' will generate traffic continuously with a rate of 300 Kbps
-        as specified by the SetAttribute("DataRate") function call, 
-        and without any interruptions due to an OFF period because we have set the OffTime attribute to 0.
-
-        Overall, these lines of code are used to configure the OnOffHelper object 'onoff' to generate CBR 
-        traffic at a constant rate of 300 Kbps without any interruptions, which is the requirement specified in the problem statement.
-
-    */
 
       onOffHelper.SetAttribute ("DataRate", StringValue ("300Kbps"));
       onOffHelper.SetAttribute ("StartTime", TimeValue (Seconds (startTimes[i])));
@@ -199,8 +176,6 @@ main (int argc, char *argv[])
       cbrSinkApps.Stop (Seconds (1.8));
       cbrSinks[i] = DynamicCast<PacketSink> (cbrSinkApps.Get (0));
     }
-
-  devices.Get (1)->TraceConnectWithoutContext ("PhyRxDrop", MakeCallback (&RxDrop));
 
   AsciiTraceHelper ascii;
   pointToPoint.EnableAsciiAll (ascii.CreateFileStream ("tcp-comparision.tr"));
