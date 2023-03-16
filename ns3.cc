@@ -191,4 +191,6 @@ main (int argc, char *argv[])
 
   Simulator::Stop (Seconds (1.80));
   Simulator::Run ();
+  flowMonitor->SerializeToXmlFile ("data.flowmon", true, true);
+  Simulator::Destroy ();
 }
