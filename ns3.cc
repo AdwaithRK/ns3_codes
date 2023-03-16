@@ -177,9 +177,9 @@ main (int argc, char *argv[])
       cbrSinks[i] = DynamicCast<PacketSink> (cbrSinkApps.Get (0));
     }
 
-  AsciiTraceHelper ascii;
-  pointToPoint.EnableAsciiAll (ascii.CreateFileStream ("tcp-comparision.tr"));
-  pointToPoint.EnablePcapAll ("tcp-comparision", true);
+  // AsciiTraceHelper ascii;
+  // pointToPoint.EnableAsciiAll (ascii.CreateFileStream ("tcp-comparision.tr"));
+  // pointToPoint.EnablePcapAll ("tcp-comparision", true);
 
   Simulator::Schedule (Seconds (0.00001), &TotalRx, total_bytes_data);
   Simulator::Schedule (Seconds (0.00001), &TraceCwnd, cw_data);
