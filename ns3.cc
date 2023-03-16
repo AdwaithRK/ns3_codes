@@ -150,7 +150,7 @@ main (int argc, char *argv[])
   double startTimes[5] = {0.2, 0.4, 0.6, 0.8, 1.0};
   double endTimes[5] = {1.8, 1.8, 1.2, 1.4, 1.6};
 
-  tcpSink->TraceConnectWithoutContext ("RxDrop", MakeCallback (&RxDrop));
+  tcpSink->TraceConnectWithoutContext ("PhyRxDrop", MakeCallback (&RxDrop));
 
   for (int i = 0; i < 5; i++)
     {
