@@ -22,6 +22,7 @@ using namespace ns3;
 
 AsciiTraceHelper ascii;
 Ptr<PacketSink> cbrSinks[5], tcpSink;
+std::string bytesDroppedName, packetsDroppedName, congestionWindowName;
 
 int totalVal;
 int total_drops = 0;
@@ -31,12 +32,12 @@ bool first_drop = true;
 static void
 RxDrop (Ptr<OutputStreamWrapper> stream, Ptr<const Packet> p)
 {
-    if(first_drop)
+  if (first_drop)
     {
-        first_drop=false;
-        *stream->GetStream ()<<0<<" "<<0<<std::endl;
+      first_drop = false;
+      *stream->GetStream () << 0 << " " << 0 << std::endl;
     }
-    *stream->GetStream ()<<Simulator::Now ().GetSeconds ()<<" "<<++total_drops<<std::endl;
+  *stream->GetStream () << Simulator::Now ().GetSeconds () << " " << ++total_drops << std::endl;
 }
 // Function to find the total cumulative recieved bytes
 static void
@@ -71,75 +72,94 @@ TraceCwnd (Ptr<OutputStreamWrapper> stream)
                                  MakeBoundCallback (&CwndChange, stream));
 }
 
+static void
+setAttributesForOnOffHelper (OnOffHelper cbrApp, double startTimes[], double endTimes[], int no)
+{
+
+  cbrApp.SetAttribute ("PacketSize", UintegerValue (1024));
+  cbrApp.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
+  cbrApp.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
+
+  cbrApp.SetAttribute ("DataRate", StringValue ("300Kbps"));
+  cbrApp.SetAttribute ("StartTime", TimeValue (Seconds (startTimes[no])));
+  cbrApp.SetAttribute ("StopTime", TimeValue (Seconds (endTimes[no])));
+}
+
+static void
+setDefaultTcpFlavour (std::string tcpFlavour = "TcpWestwood")
+{
+  Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpWestwood::GetTypeId ()));
+  Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
+  bytesDroppedName = tcpFlavour + "_bytes.dat";
+  packetsDroppedName = tcpFlavour + "_drop.dat";
+  congestionWindowName = tcpFlavour + "_cw.dat";
+}
+
+static void
+bindCallBackForStats (NetDeviceContainer devices, Ptr<OutputStreamWrapper> total_bytes_data,
+                      Ptr<OutputStreamWrapper> dropped_packets_data,
+                      Ptr<OutputStreamWrapper> cw_data)
+{
+  devices.Get (1)->TraceConnectWithoutContext ("PhyRxDrop",
+                                               MakeBoundCallback (&RxDrop, dropped_packets_data));
+
+  Simulator::Schedule (Seconds (0.00001), &TotalRx, total_bytes_data);
+  Simulator::Schedule (Seconds (0.00001), &TraceCwnd, cw_data);
+}
+
+static void
+setErrorRate (NetDeviceContainer devices, double errorRate)
+{
+  Ptr<RateErrorModel> em = CreateObject<RateErrorModel> ();
+  em->SetAttribute ("ErrorRate", DoubleValue (errorRate));
+  devices.Get (1)->SetAttribute ("ReceiveErrorModel", PointerValue (em));
+}
+
 int
 main (int argc, char *argv[])
 {
 
   uint32_t maxBytes = 0;
-  std::string prot = "TcpWestwood";
   double error = 0.0001;
+  double simTime = 1.80;
 
-  Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpWestwood::GetTypeId ()));
-  Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
+  setDefaultTcpFlavour ();
 
-  std::string a_s = "bytes_" + prot + ".dat";
-  std::string b_s = "drop_" + prot + ".dat";
-  std::string c_s = "cw_" + prot + ".dat";
+  Ptr<OutputStreamWrapper> total_bytes_data = ascii.CreateFileStream (bytesDroppedName);
+  Ptr<OutputStreamWrapper> dropped_packets_data = ascii.CreateFileStream (packetsDroppedName);
+  Ptr<OutputStreamWrapper> cw_data = ascii.CreateFileStream (congestionWindowName);
 
-  // Create file streams for data storage
-  Ptr<OutputStreamWrapper> total_bytes_data = ascii.CreateFileStream (a_s);
-  Ptr<OutputStreamWrapper> dropped_packets_data = ascii.CreateFileStream (b_s);
-  Ptr<OutputStreamWrapper> cw_data = ascii.CreateFileStream (c_s);
-
-  // Explicitly create the nodes required by the topology (shown above).
-  // NS_LOG_INFO ("Create nodes.");
   NodeContainer nodes;
   nodes.Create (2);
 
-  //NS_LOG_INFO ("Create channels.");
-
-  // Explicitly create the point-to-point link required by the topology (shown above).
-  PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Mbps"));
-  pointToPoint.SetChannelAttribute ("Delay", StringValue ("10ms"));
-  pointToPoint.SetQueue ("ns3::DropTailQueue");
+  PointToPointHelper p2p;
+  p2p.SetDeviceAttribute ("DataRate", StringValue ("1Mbps"));
+  p2p.SetChannelAttribute ("Delay", StringValue ("10ms"));
+  p2p.SetQueue ("ns3::DropTailQueue");
 
   NetDeviceContainer devices;
-  devices = pointToPoint.Install (nodes);
+  devices = p2p.Install (nodes);
 
-  // Create error model
-  Ptr<RateErrorModel> em = CreateObject<RateErrorModel> ();
-  em->SetAttribute ("ErrorRate", DoubleValue (error));
-  devices.Get (1)->SetAttribute ("ReceiveErrorModel", PointerValue (em));
-
-  // Install the internet stack on the nodes
+  setErrorRate (devices, error);
   InternetStackHelper internet;
   internet.Install (nodes);
 
-  // We've got the "hardware" in place.  Now we need to add IP addresses.
-  //NS_LOG_INFO ("Assign IP Addresses.");
   Ipv4AddressHelper ipv4;
   ipv4.SetBase ("10.1.1.0", "255.255.255.0");
-  Ipv4InterfaceContainer ipv4Container = ipv4.Assign (devices);
+  Ipv4InterfaceContainer ipv4Con = ipv4.Assign (devices);
 
-  //NS_LOG_INFO ("Create Applications.");
-
-  // Create a BulkSendApplication and install it on node 0
   uint16_t port = 21;
-  BulkSendHelper source ("ns3::TcpSocketFactory",
-                         InetSocketAddress (ipv4Container.GetAddress (1), port));
-  // Set the amount of data to send in bytes.  Zero is unlimited.
+  BulkSendHelper source ("ns3::TcpSocketFactory", InetSocketAddress (ipv4Con.GetAddress (1), port));
   source.SetAttribute ("MaxBytes", UintegerValue (maxBytes));
   ApplicationContainer sourceApps = source.Install (nodes.Get (0));
   sourceApps.Start (Seconds (0.0));
-  sourceApps.Stop (Seconds (1.80));
+  sourceApps.Stop (Seconds (simTime));
 
-  // Create a PacketSinkApplication and install it on node 1
   PacketSinkHelper sink ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), port));
   ApplicationContainer sinkApps = sink.Install (nodes.Get (1));
 
   sinkApps.Start (Seconds (0.0));
-  sinkApps.Stop (Seconds (1.80));
+  sinkApps.Stop (Seconds (simTime));
 
   tcpSink = DynamicCast<PacketSink> (sinkApps.Get (0));
 
@@ -148,49 +168,29 @@ main (int argc, char *argv[])
   double startTimes[5] = {0.2, 0.4, 0.6, 0.8, 1.0};
   double endTimes[5] = {1.8, 1.8, 1.2, 1.4, 1.6};
 
-
   for (int i = 0; i < 5; i++)
     {
       ApplicationContainer cbrApps;
       ApplicationContainer cbrSinkApps;
 
       OnOffHelper onOffHelper ("ns3::UdpSocketFactory",
-                               InetSocketAddress (ipv4Container.GetAddress (1), cbrPort + i));
-      onOffHelper.SetAttribute ("PacketSize", UintegerValue (1024));
-      onOffHelper.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
-      onOffHelper.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
+                               InetSocketAddress (ipv4Con.GetAddress (1), cbrPort + i));
 
-      onOffHelper.SetAttribute ("DataRate", StringValue ("300Kbps"));
-      onOffHelper.SetAttribute ("StartTime", TimeValue (Seconds (startTimes[i])));
-      onOffHelper.SetAttribute ("StopTime", TimeValue (Seconds (endTimes[i])));
+      setAttributesForOnOffHelper (onOffHelper, startTimes, endTimes, i);
+
       cbrApps.Add (onOffHelper.Install (nodes.Get (0)));
-      // Packet sinks for each CBR agent
 
       PacketSinkHelper sink ("ns3::UdpSocketFactory",
                              InetSocketAddress (Ipv4Address::GetAny (), cbrPort + i));
       cbrSinkApps = sink.Install (nodes.Get (1));
       cbrSinkApps.Start (Seconds (0.0));
-      cbrSinkApps.Stop (Seconds (1.8));
+      cbrSinkApps.Stop (Seconds (simTime));
       cbrSinks[i] = DynamicCast<PacketSink> (cbrSinkApps.Get (0));
     }
 
-    devices.Get (1)->TraceConnectWithoutContext ("PhyRxDrop", MakeBoundCallback (&RxDrop, dropped_packets_data));
+  bindCallBackForStats (devices, total_bytes_data, dropped_packets_data, cw_data);
 
-
-  // AsciiTraceHelper ascii;
-  // pointToPoint.EnableAsciiAll (ascii.CreateFileStream ("tcp-comparision.tr"));
-  // pointToPoint.EnablePcapAll ("tcp-comparision", true);
-
-  Simulator::Schedule (Seconds (0.00001), &TotalRx, total_bytes_data);
-  Simulator::Schedule (Seconds (0.00001), &TraceCwnd, cw_data);
-
-  // Flow monitor
-  Ptr<FlowMonitor> flowMonitor;
-  FlowMonitorHelper flowHelper;
-  flowMonitor = flowHelper.InstallAll ();
-
-  Simulator::Stop (Seconds (1.80));
+  Simulator::Stop (Seconds (simTime));
   Simulator::Run ();
-  flowMonitor->SerializeToXmlFile ("data.flowmon", true, true);
   Simulator::Destroy ();
 }
