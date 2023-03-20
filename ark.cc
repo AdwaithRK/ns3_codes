@@ -73,7 +73,8 @@ TraceCwnd (Ptr<OutputStreamWrapper> stream)
 }
 
 static void
-setAttributesForOnOffHelper (OnOffHelper cbrApp, double startTimes[], double endTimes[], int no)
+setAttributesForOnOffHelper (OnOffHelper cbrApp, double cbrStartTimes[], double cbrEndTimes[],
+                             int no)
 {
 
   cbrApp.SetAttribute ("PacketSize", UintegerValue (1024));
@@ -81,8 +82,8 @@ setAttributesForOnOffHelper (OnOffHelper cbrApp, double startTimes[], double end
   cbrApp.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
 
   cbrApp.SetAttribute ("DataRate", StringValue ("300Kbps"));
-  cbrApp.SetAttribute ("StartTime", TimeValue (Seconds (startTimes[no])));
-  cbrApp.SetAttribute ("StopTime", TimeValue (Seconds (endTimes[no])));
+  cbrApp.SetAttribute ("StartTime", TimeValue (Seconds (cbrStartTimes[no])));
+  cbrApp.SetAttribute ("StopTime", TimeValue (Seconds (cbrEndTimes[no])));
 }
 
 static void
@@ -165,8 +166,8 @@ main (int argc, char *argv[])
 
   uint16_t cbrPort = 12345;
 
-  double startTimes[5] = {0.2, 0.4, 0.6, 0.8, 1.0};
-  double endTimes[5] = {1.8, 1.8, 1.2, 1.4, 1.6};
+  double cbrStartTimes[5] = {0.2, 0.4, 0.6, 0.8, 1.0};
+  double cbrEndTimes[5] = {1.8, 1.8, 1.2, 1.4, 1.6};
 
   for (int i = 0; i < 5; i++)
     {
@@ -176,7 +177,7 @@ main (int argc, char *argv[])
       OnOffHelper onOffHelper ("ns3::UdpSocketFactory",
                                InetSocketAddress (ipv4Con.GetAddress (1), cbrPort + i));
 
-      setAttributesForOnOffHelper (onOffHelper, startTimes, endTimes, i);
+      setAttributesForOnOffHelper (onOffHelper, cbrStartTimes, cbrEndTimes, i);
 
       cbrApps.Add (onOffHelper.Install (nodes.Get (0)));
 
